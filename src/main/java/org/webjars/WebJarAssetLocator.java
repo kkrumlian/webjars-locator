@@ -7,9 +7,9 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map.Entry;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -118,6 +118,8 @@ public class WebJarAssetLocator {
                         assetPaths.add(assetPathCandidate);
                     }
                 }
+            } else if ("vfs".equals(url.getProtocol())) {
+                assetPaths.addAll(new JBossVfsHandler().getAssetPaths(url, filterExpr, classLoaders));
             }
         }
         return assetPaths;
