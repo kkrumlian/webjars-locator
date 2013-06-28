@@ -34,6 +34,43 @@ public class WebJarAssetLocator {
 
     private static final int MAX_DIRECTORY_DEPTH = 5;
 
+    private static final WebJarAssetResolver EXACTLY_ONE = new WebJarAssetResolver() {
+        public String resolve(SortedMap<String, String> fullPathTail, String partialPath) throws RuntimeException {
+            if (fullPathTail.size() == 0) {
+                throwNotFoundException(partialPath);
+            }
+
+            final String reversePartialPath = reversePath(partialPath);
+
+            final Iterator<Entry<String, String>> fullPathTailIter = fullPathTail
+                    .entrySet().iterator();
+            final Entry<String, String> fullPathEntry = fullPathTailIter.next();
+            if (!fullPathEntry.getKey().startsWith(reversePartialPath)) {
+                throwNotFoundException(partialPath);
+            }
+            final String fullPath = fullPathEntry.getValue();
+
+            if (fullPathTailIter.hasNext()
+                    && fullPathTailIter.next().getKey()
+                    .startsWith(reversePartialPath)) {
+                throw new MultipleMatchesException(
+                        "Multiple matches found for "
+                                + partialPath
+                                + ". Please provide a more specific path, for example by including a version number.");
+            }
+
+            return fullPath;
+        }
+
+        private String throwNotFoundException(final String partialPath) {
+            throw new IllegalArgumentException(
+                    partialPath
+                            + " could not be found. Make sure you've added the corresponding WebJar and please check for typos.");
+        }
+    };
+
+    private WebJarAssetResolver assetResolver = EXACTLY_ONE;
+
     private static void aggregateFile(final File file, final Set<String> aggregatedChildren, final Pattern filterExpr) {
         final String path = file.getPath();
         final String relativePath = path.substring(path.indexOf(WEBJARS_PATH_PREFIX));
@@ -209,28 +246,7 @@ public class WebJarAssetLocator {
         final SortedMap<String, String> fullPathTail = fullPathIndex
                 .tailMap(reversePartialPath);
 
-        if (fullPathTail.size() == 0) {
-            throwNotFoundException(partialPath);
-        }
-
-        final Iterator<Entry<String, String>> fullPathTailIter = fullPathTail
-                .entrySet().iterator();
-        final Entry<String, String> fullPathEntry = fullPathTailIter.next();
-        if (!fullPathEntry.getKey().startsWith(reversePartialPath)) {
-            throwNotFoundException(partialPath);
-        }
-        final String fullPath = fullPathEntry.getValue();
-
-        if (fullPathTailIter.hasNext()
-                && fullPathTailIter.next().getKey()
-                .startsWith(reversePartialPath)) {
-            throw new MultipleMatchesException(
-                    "Multiple matches found for "
-                            + partialPath
-                            + ". Please provide a more specific path, for example by including a version number.");
-        }
-
-        return fullPath;
+        return assetResolver.resolve(fullPathTail, partialPath);
     }
 
     public SortedMap<String, String> getFullPathIndex() {
@@ -253,5 +269,9 @@ public class WebJarAssetLocator {
             }
         }
         return assets;
+    }
+
+    public void setAssetResolver(WebJarAssetResolver assetResolver) {
+        this.assetResolver = assetResolver;
     }
 }

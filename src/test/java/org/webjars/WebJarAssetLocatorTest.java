@@ -3,9 +3,12 @@ package org.webjars;
 import static org.hamcrest.core.IsCollectionContaining.hasItems;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.Test;
 
@@ -90,6 +93,22 @@ public class WebJarAssetLocatorTest {
         } catch (IllegalArgumentException e) {
             assertEquals("Multiple matches found for module/multiple_module.js. Please provide a more specific path, for example by including a version number.", e.getMessage());
         }
+    }
+
+    @Test
+    public void should_use_custom_asset_resolver() {
+        WebJarAssetLocator locator = new WebJarAssetLocator();
+        final AtomicBoolean wasResolved = new AtomicBoolean(false);
+        locator.setAssetResolver(new WebJarAssetResolver() {
+            public String resolve(SortedMap<String, String> fullPaths, String partialPath) throws RuntimeException {
+                wasResolved.set(true);
+                return "";
+            }
+        });
+
+        locator.getFullPath("module/multiple_module.js");
+
+        assertTrue("AssetResolver was not called!", wasResolved.get());
     }
 
     @Test
