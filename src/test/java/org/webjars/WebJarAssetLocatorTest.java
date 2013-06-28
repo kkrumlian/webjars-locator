@@ -97,9 +97,8 @@ public class WebJarAssetLocatorTest {
 
     @Test
     public void should_use_custom_asset_resolver() {
-        WebJarAssetLocator locator = new WebJarAssetLocator();
         final AtomicBoolean wasResolved = new AtomicBoolean(false);
-        locator.setAssetResolver(new WebJarAssetResolver() {
+        WebJarAssetLocator locator = new WebJarAssetLocator(new WebJarAssetResolver() {
             public String resolve(SortedMap<String, String> fullPaths, String partialPath) throws RuntimeException {
                 wasResolved.set(true);
                 return "";
