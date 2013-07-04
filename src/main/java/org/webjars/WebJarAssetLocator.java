@@ -7,9 +7,8 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Enumeration;
-import java.util.Iterator;
-import java.util.Map.Entry;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -33,6 +32,29 @@ public class WebJarAssetLocator {
     public static final String WEBJARS_PATH_PREFIX = "META-INF/resources/webjars";
 
     private static final int MAX_DIRECTORY_DEPTH = 5;
+
+    private static final WebJarAssetResolver EXACTLY_ONE = new WebJarAssetResolver() {
+        public String resolve(SortedMap<String, String> fullPathTail, String partialPath) throws RuntimeException {
+            if (fullPathTail.size() == 0) {
+                throwNotFoundException(partialPath);
+            }
+
+            if (fullPathTail.size() > 1) {
+                throw new MultipleMatchesException(
+                        "Multiple matches found for "
+                                + partialPath
+                                + ". Please provide a more specific path, for example by including a version number.");
+            }
+
+            return fullPathTail.get(fullPathTail.firstKey());
+        }
+
+        private String throwNotFoundException(final String partialPath) {
+            throw new IllegalArgumentException(
+                    partialPath
+                            + " could not be found. Make sure you've added the corresponding WebJar and please check for typos.");
+        }
+    };
 
     private static void aggregateFile(final File file, final Set<String> aggregatedChildren, final Pattern filterExpr) {
         final String path = file.getPath();
@@ -166,30 +188,50 @@ public class WebJarAssetLocator {
         return reversedAssetPath.toString();
     }
 
-    final SortedMap<String, String> fullPathIndex;
+    private final SortedMap<String, String> fullPathIndex;
+    private final WebJarAssetResolver assetResolver;
 
     /**
      * Convenience constructor that will form a locator for all resources on the
      * current class path.
+     *
+     * Throws an exception if there isn't exactly one match for a requested path.
      */
     public WebJarAssetLocator() {
-        this(getFullPathIndex(Pattern.compile(".*"),
+        this(EXACTLY_ONE, getFullPathIndex(Pattern.compile(".*"),
                 WebJarAssetLocator.class.getClassLoader()));
     }
 
     /**
      * Establish a locator given an index that it should use.
      *
-     * @param fullPathIndex the index to use.
+     * @param assetResolver determines how 0, 1 or more matches should be handled.
      */
-    public WebJarAssetLocator(final SortedMap<String, String> fullPathIndex) {
-        this.fullPathIndex = fullPathIndex;
+    public WebJarAssetLocator(WebJarAssetResolver assetResolver) {
+        this(assetResolver, getFullPathIndex(Pattern.compile(".*"),
+                WebJarAssetLocator.class.getClassLoader()));
     }
 
-    private String throwNotFoundException(final String partialPath) {
-        throw new IllegalArgumentException(
-                partialPath
-                        + " could not be found. Make sure you've added the corresponding WebJar and please check for typos.");
+    /**
+     * Establish a locator given an index that it should use.
+     *
+     * Throws an exception if there isn't exactly one match for a requested path.
+     *
+     * @param fullPathIndex the index to use.
+     */
+    public WebJarAssetLocator(SortedMap<String, String> fullPathIndex) {
+        this(EXACTLY_ONE, fullPathIndex);
+    }
+
+    /**
+     * Establish a locator given an index that it should use.
+     *
+     * @param fullPathIndex the index to use.
+     * @param assetResolver determines how 0, 1 or more matches should be handled.
+     */
+    public WebJarAssetLocator(WebJarAssetResolver assetResolver, final SortedMap<String, String> fullPathIndex) {
+        this.assetResolver = assetResolver;
+        this.fullPathIndex = fullPathIndex;
     }
 
     /**
@@ -201,34 +243,15 @@ public class WebJarAssetLocator {
      * @return a fully qualified path to the resource.
      */
     public String getFullPath(final String partialPath) {
+        SortedMap<String,String> candidates = new TreeMap<String, String>();
 
-        final String reversePartialPath = reversePath(partialPath);
-
-        final SortedMap<String, String> fullPathTail = fullPathIndex
-                .tailMap(reversePartialPath);
-
-        if (fullPathTail.size() == 0) {
-            throwNotFoundException(partialPath);
+        for (Map.Entry<String, String> entry : fullPathIndex.entrySet()) {
+            if (entry.getValue().endsWith(partialPath)) {
+                candidates.put(entry.getKey(), entry.getValue());
+            }
         }
 
-        final Iterator<Entry<String, String>> fullPathTailIter = fullPathTail
-                .entrySet().iterator();
-        final Entry<String, String> fullPathEntry = fullPathTailIter.next();
-        if (!fullPathEntry.getKey().startsWith(reversePartialPath)) {
-            throwNotFoundException(partialPath);
-        }
-        final String fullPath = fullPathEntry.getValue();
-
-        if (fullPathTailIter.hasNext()
-                && fullPathTailIter.next().getKey()
-                .startsWith(reversePartialPath)) {
-            throw new MultipleMatchesException(
-                    "Multiple matches found for "
-                            + partialPath
-                            + ". Please provide a more specific path, for example by including a version number.");
-        }
-
-        return fullPath;
+        return assetResolver.resolve(candidates, partialPath);
     }
 
     public SortedMap<String, String> getFullPathIndex() {
